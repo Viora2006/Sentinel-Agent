@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import './styles.css'
 import AuthPage from './components/AuthPage'
 import Header from './components/Header'
@@ -7,10 +7,12 @@ import AgentTasksPanel from './panels/AgentTasksPanel'
 import CodeSearchPanel from './panels/CodeSearchPanel'
 import DashboardPanel from './panels/DashboardPanel'
 import NewProjectPanel from './panels/NewProjectPanel'
+import ProjectDetailPanel from './panels/ProjectDetailPanel'
 import ProjectsPanel from './panels/ProjectsPanel'
 import RepoImportPanel from './panels/RepoImportPanel'
 import SettingsPanel from './panels/SettingsPanel'
 import WorkersPanel from './panels/WorkersPanel'
+import { API_BASE_URL } from './api'
 
 const panels = {
   dashboard: {
@@ -24,6 +26,10 @@ const panels = {
   projects: {
     title: 'Projects',
     eyebrow: 'Codebases in flight',
+  },
+  projectDetail: {
+    title: 'Project',
+    eyebrow: 'Stored files and source',
   },
   repoImport: {
     title: 'Repo Import',
@@ -48,51 +54,156 @@ const panels = {
 }
 
 function App() {
-  const [token, setToken] = useState(() => localStorage.getItem('ai-code-agent-token'))
-  const [username, setUsername] = useState(() => localStorage.getItem('ai-code-agent-user') || '')
+  const [isCheckingSession, setIsCheckingSession] = useState(true)
+  const [username, setUsername] = useState('')
   const [activePanel, setActivePanel] = useState('dashboard')
   const [projects, setProjects] = useState([])
+  const [projectsStatus, setProjectsStatus] = useState('')
+  const [repoImportDraft, setRepoImportDraft] = useState({ repoUrl: '', projectName: '', description: '' })
+  const [selectedProjectId, setSelectedProjectId] = useState(null)
 
   const currentPanel = useMemo(() => panels[activePanel] || panels.dashboard, [activePanel])
 
-  function handleAuthenticated(nextToken, nextUsername) {
-    localStorage.setItem('ai-code-agent-token', nextToken)
-    localStorage.setItem('ai-code-agent-user', nextUsername)
-    setToken(nextToken)
+  const clearPrivateState = useCallback(() => {
+    setProjects([])
+    setProjectsStatus('')
+    setRepoImportDraft({ repoUrl: '', projectName: '', description: '' })
+    setSelectedProjectId(null)
+  }, [])
+
+  const clearAuthenticatedSession = useCallback(() => {
+    setUsername('')
+    clearPrivateState()
+    setActivePanel('dashboard')
+  }, [clearPrivateState])
+
+  useEffect(() => {
+    let isCurrent = true
+
+    async function checkSession() {
+      try {
+        const response = await fetch(`${API_BASE_URL}/auth/me`, {
+          credentials: 'include',
+        })
+        const data = await response.json().catch(() => ({}))
+
+        if (isCurrent && response.ok) {
+          setUsername(data.username || '')
+        }
+      } catch {
+        if (isCurrent) {
+          clearPrivateState()
+        }
+      } finally {
+        if (isCurrent) {
+          setIsCheckingSession(false)
+        }
+      }
+    }
+
+    checkSession()
+
+    return () => {
+      isCurrent = false
+    }
+  }, [clearPrivateState])
+
+  useEffect(() => {
+    if (!username) {
+      clearPrivateState()
+      return
+    }
+
+    let isCurrent = true
+
+    async function loadProjects() {
+      setProjectsStatus('Loading projects...')
+
+      try {
+        const response = await fetch(`${API_BASE_URL}/projects`, {
+          credentials: 'include',
+        })
+        const data = await response.json().catch(() => [])
+
+        if (response.status === 401 || response.status === 403) {
+          clearAuthenticatedSession()
+          throw new Error('Session expired. Please sign in again.')
+        }
+
+        if (!response.ok) {
+          throw new Error(data.message || 'Unable to load projects.')
+        }
+
+        if (isCurrent) {
+          setProjects(data.map(toProjectCard))
+          setProjectsStatus('')
+        }
+      } catch (error) {
+        if (isCurrent) {
+          setProjects([])
+          setProjectsStatus(error.message || 'Unable to load projects.')
+        }
+      }
+    }
+
+    loadProjects()
+
+    return () => {
+      isCurrent = false
+    }
+  }, [clearAuthenticatedSession, clearPrivateState, username])
+
+  function handleAuthenticated(nextUsername) {
     setUsername(nextUsername)
   }
 
   async function handleLogout() {
-    if (token) {
-      try {
-        await fetch('http://localhost:8080/api/auth/logout', {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        })
-      } catch {
-        // Local logout should still work if the backend is offline during frontend-only demos.
-      }
+    try {
+      await fetch(`${API_BASE_URL}/auth/logout`, {
+        method: 'POST',
+        credentials: 'include',
+      })
+    } catch {
+      // Local logout should still work if the backend is offline during frontend-only demos.
     }
 
-    localStorage.removeItem('ai-code-agent-token')
-    localStorage.removeItem('ai-code-agent-user')
-    setToken('')
-    setUsername('')
-    setActivePanel('dashboard')
+    clearAuthenticatedSession()
   }
 
   function handleCreateProject(project) {
-    setProjects((currentProjects) => [
-      {
-        ...project,
-        id: crypto.randomUUID(),
-        createdAt: new Date().toISOString(),
-      },
-      ...currentProjects,
-    ])
-    setActivePanel('projects')
+    setRepoImportDraft({
+      repoUrl: project.repoUrl,
+      projectName: project.name,
+      description: project.description,
+    })
+    setActivePanel('repoImport')
+  }
+
+  function handleImportComplete(importedRepository) {
+    setProjects((currentProjects) => {
+      const nextProject = toProjectCard(importedRepository)
+
+      const existingProjectIndex = currentProjects.findIndex((project) => project.repoUrl === nextProject.repoUrl)
+      if (existingProjectIndex >= 0) {
+        return currentProjects.map((project, index) => (index === existingProjectIndex ? { ...project, ...nextProject } : project))
+      }
+
+      return [nextProject, ...currentProjects]
+    })
+  }
+
+  function handleImportRequest(project) {
+    setRepoImportDraft({
+      repoUrl: project?.repoUrl || '',
+      projectName: project?.name || '',
+      description: project?.description || '',
+    })
+    setActivePanel('repoImport')
+  }
+
+  function handleOpenProject(projectId) {
+    setSelectedProjectId(projectId)
+    setActivePanel('projectDetail')
   }
 
   function renderPanel() {
@@ -100,9 +211,33 @@ function App() {
       case 'newProject':
         return <NewProjectPanel onCreateProject={handleCreateProject} />
       case 'projects':
-        return <ProjectsPanel projects={projects} onCreateFirst={() => setActivePanel('newProject')} />
+        return (
+          <ProjectsPanel
+            projects={projects}
+            status={projectsStatus}
+            onCreateFirst={() => setActivePanel('newProject')}
+            onImportProject={handleImportRequest}
+            onOpenProject={handleOpenProject}
+          />
+        )
+      case 'projectDetail':
+        return (
+          <ProjectDetailPanel
+            onBack={() => setActivePanel('projects')}
+            onSessionExpired={clearAuthenticatedSession}
+            projectId={selectedProjectId}
+          />
+        )
       case 'repoImport':
-        return <RepoImportPanel />
+        return (
+          <RepoImportPanel
+            initialDescription={repoImportDraft.description}
+            initialProjectName={repoImportDraft.projectName}
+            initialRepoUrl={repoImportDraft.repoUrl}
+            onImportComplete={handleImportComplete}
+            onSessionExpired={clearAuthenticatedSession}
+          />
+        )
       case 'agentTasks':
         return <AgentTasksPanel />
       case 'codeSearch':
@@ -117,7 +252,18 @@ function App() {
     }
   }
 
-  if (!token) {
+  if (isCheckingSession) {
+    return (
+      <main className="auth-page">
+        <section className="empty-state">
+          <p className="eyebrow">Checking session</p>
+          <h2>Opening your workspace...</h2>
+        </section>
+      </main>
+    )
+  }
+
+  if (!username) {
     return <AuthPage onAuthenticated={handleAuthenticated} />
   }
 
@@ -135,6 +281,20 @@ function App() {
       </div>
     </div>
   )
+}
+
+function toProjectCard(project) {
+  return {
+    id: project.projectId,
+    name: project.projectName,
+    repoName: project.repoName,
+    repoUrl: project.githubUrl,
+    description: project.description || `Imported repository with ${project.totalFiles} tracked files.`,
+    status: project.status === 'IMPORTED' ? 'Imported' : project.status,
+    totalFiles: project.totalFiles,
+    languages: project.languages || {},
+    imported: project.status === 'IMPORTED',
+  }
 }
 
 export default App

@@ -1,6 +1,5 @@
 import { useState } from 'react'
-
-const API_BASE_URL = 'http://localhost:8080/api/auth'
+import { API_BASE_URL } from '../api'
 
 function AuthPage({ onAuthenticated }) {
   const [form, setForm] = useState({ username: '', password: '' })
@@ -20,11 +19,22 @@ function AuthPage({ onAuthenticated }) {
       return
     }
 
+    if (form.username.trim().length < 3) {
+      setStatus('Username must be at least 3 characters.')
+      return
+    }
+
+    if (form.password.length < 8) {
+      setStatus('Password must be at least 8 characters.')
+      return
+    }
+
     setIsLoading(true)
 
     try {
-      const response = await fetch(`${API_BASE_URL}/${mode}`, {
+      const response = await fetch(`${API_BASE_URL}/auth/${mode}`, {
         method: 'POST',
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
         },
@@ -40,14 +50,9 @@ function AuthPage({ onAuthenticated }) {
         throw new Error(data.message || `${mode === 'login' ? 'Login' : 'Registration'} failed.`)
       }
 
-      if (data.token) {
-        onAuthenticated(data.token, form.username.trim())
-        return
-      }
-
-      setStatus(data.message || 'Registration succeeded. You can log in now.')
+      onAuthenticated(data.username || form.username.trim())
     } catch (error) {
-      setStatus(error.message || 'Unable to reach the auth service at localhost:8080.')
+      setStatus(error.message || `Unable to reach the auth service at ${API_BASE_URL}.`)
     } finally {
       setIsLoading(false)
     }

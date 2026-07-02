@@ -571,6 +571,25 @@ textarea:focus {
   margin-top: 18px;
 }
 
+.project-meta,
+.language-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.project-meta span,
+.language-summary span {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.05);
+  padding: 5px 9px;
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
 .import-console,
 .task-composer,
 .search-panel {
@@ -702,6 +721,193 @@ textarea:focus {
   margin: 0;
 }
 
+.import-result {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 160px;
+  gap: 18px;
+  align-items: start;
+  padding: 22px;
+}
+
+.import-result h2 {
+  margin-bottom: 8px;
+}
+
+.import-result a {
+  color: var(--cyan);
+  overflow-wrap: anywhere;
+  text-decoration: none;
+}
+
+.import-stats {
+  display: grid;
+  gap: 6px;
+  justify-items: end;
+}
+
+.import-stats span {
+  color: var(--faint);
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.import-stats strong {
+  color: #fff;
+  font-size: 2.2rem;
+  line-height: 1;
+}
+
+.project-detail-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  align-items: flex-start;
+  padding: 22px;
+}
+
+.project-detail-header h2 {
+  margin-bottom: 8px;
+}
+
+.project-detail-header a {
+  display: inline-block;
+  margin-bottom: 12px;
+  color: var(--cyan);
+  overflow-wrap: anywhere;
+  text-decoration: none;
+}
+
+.project-detail-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.project-detail-layout {
+  display: grid;
+  grid-template-columns: minmax(260px, 360px) minmax(0, 1fr);
+  gap: 16px;
+  min-height: 620px;
+}
+
+.file-browser,
+.file-preview {
+  min-width: 0;
+  padding: 18px;
+}
+
+.file-browser {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: 14px;
+}
+
+.file-browser-summary {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.file-browser-summary strong {
+  color: #fff;
+  font-size: 2rem;
+}
+
+.file-browser-summary span {
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.file-list {
+  min-height: 0;
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.file-row {
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.04);
+  padding: 10px;
+  text-align: left;
+}
+
+.file-row:hover,
+.file-row.active {
+  border-color: var(--line-strong);
+  color: #fff;
+  background: rgba(168, 85, 247, 0.14);
+}
+
+.file-row span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-row small {
+  color: var(--faint);
+  font-weight: 800;
+}
+
+.file-preview {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 16px;
+}
+
+.file-preview-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.file-preview-header h3 {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.file-preview-header span {
+  color: var(--muted);
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.file-preview pre {
+  min-height: 0;
+  margin: 0;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  color: #dbeafe;
+  background: rgba(4, 6, 16, 0.78);
+  padding: 16px;
+  font-size: 0.86rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.empty-file {
+  display: grid;
+  place-content: center;
+  min-height: 420px;
+  color: var(--muted);
+  text-align: center;
+}
+
 .result-card h3 {
   margin: 8px 0;
 }
@@ -742,8 +948,13 @@ textarea:focus {
   .auth-card,
   .hero-band,
   .form-layout,
-  .project-grid {
+  .project-grid,
+  .project-detail-layout {
     grid-template-columns: 1fr;
+  }
+
+  .project-detail-layout {
+    min-height: 0;
   }
 
   .auth-visual {
@@ -766,7 +977,9 @@ textarea:focus {
   }
 
   .top-header,
-  .task-item {
+  .task-item,
+  .project-detail-header,
+  .file-preview-header {
     align-items: flex-start;
     flex-direction: column;
   }
@@ -781,10 +994,15 @@ textarea:focus {
   .stats-grid,
   .worker-grid,
   .settings-grid,
+  .import-result,
   .import-console,
   .task-composer,
   .search-panel {
     grid-template-columns: 1fr;
+  }
+
+  .import-stats {
+    justify-items: start;
   }
 
   .primary-button,

@@ -64,13 +64,13 @@ function NewProjectPanel({ onCreateProject }) {
       </form>
 
       <aside className="architecture-note">
-        <p className="eyebrow">Planned endpoint</p>
-        <h2>POST /api/projects</h2>
+        <p className="eyebrow">Import-backed storage</p>
+        <h2>Projects are saved after import.</h2>
         <p>
-          Project creation is local React state for now. Later this form can send the same shape to the
-          Spring Boot backend.
+          This form prepares the project details, then the import step clones the repo and stores the project
+          under your signed-in account.
         </p>
-        <code>{'{ name, repoUrl, description }'}</code>
+        <code>{'{ projectName, githubUrl, description }'}</code>
       </aside>
     </section>
   )

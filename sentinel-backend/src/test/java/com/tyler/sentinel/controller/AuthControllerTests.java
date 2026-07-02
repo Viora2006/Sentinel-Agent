@@ -1,8 +1,7 @@
 package com.tyler.sentinel.controller;
 
-import static org.hamcrest.Matchers.not;
-import static org.hamcrest.Matchers.blankOrNullString;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -16,6 +15,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -48,7 +48,7 @@ class AuthControllerTests {
     }
 
     @Test
-    void registerCreatesUserAndReturnsJwt() throws Exception {
+    void registerCreatesUserAndSetsHttpOnlyCookie() throws Exception {
         createdUsername = "register_" + UUID.randomUUID().toString().replace("-", "");
         String body = """
                 {
@@ -61,8 +61,9 @@ class AuthControllerTests {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isOk())
+                .andExpect(header().string(HttpHeaders.SET_COOKIE, org.hamcrest.Matchers.containsString("sentinel_session=")))
+                .andExpect(header().string(HttpHeaders.SET_COOKIE, org.hamcrest.Matchers.containsString("HttpOnly")))
                 .andExpect(jsonPath("$.message").value("Registration successful."))
-                .andExpect(jsonPath("$.token").value(not(blankOrNullString())))
                 .andExpect(jsonPath("$.userId").isNumber())
                 .andExpect(jsonPath("$.username").value(createdUsername));
     }

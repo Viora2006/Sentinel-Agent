@@ -32,7 +32,7 @@ public class AuthService {
     }
 
     @Transactional
-    public AuthResponse register(Credentials credentials) {
+    public AuthResult register(Credentials credentials) {
         String username = normalizeUsername(credentials.getUsername());
 
         if (userRepository.existsByUsername(username)) {
@@ -43,11 +43,16 @@ public class AuthService {
         JwtService.GeneratedToken generatedToken = jwtService.generateToken(user);
         userSessionRepository.save(new UserSession(generatedToken.tokenId(), user, generatedToken.expiresAt()));
 
-        return new AuthResponse("Registration successful.", generatedToken.token(), user.getId(), user.getUsername());
+        return new AuthResult(
+                new AuthResponse("Registration successful.", user.getId(), user.getUsername()),
+                generatedToken.token(),
+                generatedToken.tokenId(),
+                generatedToken.expiresAt()
+        );
     }
 
     @Transactional
-    public AuthResponse login(Credentials credentials) {
+    public AuthResult login(Credentials credentials) {
         String username = normalizeUsername(credentials.getUsername());
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new BadCredentialsException("Invalid username or password."));
@@ -59,7 +64,12 @@ public class AuthService {
         JwtService.GeneratedToken generatedToken = jwtService.generateToken(user);
         userSessionRepository.save(new UserSession(generatedToken.tokenId(), user, generatedToken.expiresAt()));
 
-        return new AuthResponse("Login successful.", generatedToken.token(), user.getId(), user.getUsername());
+        return new AuthResult(
+                new AuthResponse("Login successful.", user.getId(), user.getUsername()),
+                generatedToken.token(),
+                generatedToken.tokenId(),
+                generatedToken.expiresAt()
+        );
     }
 
     @Transactional
@@ -72,5 +82,8 @@ public class AuthService {
 
     private String normalizeUsername(String username) {
         return username.trim().toLowerCase();
+    }
+
+    public record AuthResult(AuthResponse response, String token, String tokenId, java.time.Instant expiresAt) {
     }
 }

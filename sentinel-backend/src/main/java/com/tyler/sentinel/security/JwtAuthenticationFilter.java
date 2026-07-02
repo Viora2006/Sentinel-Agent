@@ -4,6 +4,7 @@ import com.tyler.sentinel.model.UserSession;
 import com.tyler.sentinel.repository.UserSessionRepository;
 import com.tyler.sentinel.service.JwtService;
 import io.jsonwebtoken.Claims;
+import jakarta.servlet.http.Cookie;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -11,7 +12,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.time.Instant;
 import java.util.List;
-import org.springframework.http.HttpHeaders;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -23,10 +24,16 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtService jwtService;
     private final UserSessionRepository userSessionRepository;
+    private final String authCookieName;
 
-    public JwtAuthenticationFilter(JwtService jwtService, UserSessionRepository userSessionRepository) {
+    public JwtAuthenticationFilter(
+            JwtService jwtService,
+            UserSessionRepository userSessionRepository,
+            @Value("${app.auth.cookie-name:sentinel_session}") String authCookieName
+    ) {
         this.jwtService = jwtService;
         this.userSessionRepository = userSessionRepository;
+        this.authCookieName = authCookieName;
     }
 
     @Override
@@ -35,15 +42,15 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             HttpServletResponse response,
             FilterChain filterChain
     ) throws ServletException, IOException {
-        String authorizationHeader = request.getHeader(HttpHeaders.AUTHORIZATION);
+        SecurityContextHolder.clearContext();
+        String token = tokenFromCookie(request);
 
-        if (authorizationHeader == null || !authorizationHeader.startsWith("Bearer ")) {
+        if (token == null || token.isBlank()) {
             filterChain.doFilter(request, response);
             return;
         }
 
         try {
-            String token = authorizationHeader.substring(7);
             Claims claims = jwtService.parseClaims(token);
 
             if (isActiveSession(claims)) {
@@ -59,6 +66,20 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         }
 
         filterChain.doFilter(request, response);
+    }
+
+    private String tokenFromCookie(HttpServletRequest request) {
+        Cookie[] cookies = request.getCookies();
+        if (cookies == null) {
+            return null;
+        }
+
+        for (Cookie cookie : cookies) {
+            if (authCookieName.equals(cookie.getName())) {
+                return cookie.getValue();
+            }
+        }
+        return null;
     }
 
     private boolean isActiveSession(Claims claims) {
