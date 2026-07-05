@@ -221,3 +221,130 @@ create index if not exists project_files_project_id_idx
 
 create index if not exists projects_user_id_idx
     on projects (user_id);
+
+create table if not exists code_symbols (
+    id bigserial primary key,
+    project_id bigint not null,
+    file_id bigint not null,
+    parent_symbol_id bigint,
+    type varchar(50) not null,
+    name varchar(512) not null,
+    signature varchar(2048),
+    start_line integer,
+    end_line integer,
+    created_at timestamp with time zone not null default now(),
+    constraint code_symbols_project_id_fk
+        foreign key (project_id)
+        references projects (id)
+        on delete cascade,
+    constraint code_symbols_file_id_fk
+        foreign key (file_id)
+        references project_files (id)
+        on delete cascade,
+    constraint code_symbols_parent_symbol_id_fk
+        foreign key (parent_symbol_id)
+        references code_symbols (id)
+        on delete cascade
+);
+
+alter table code_symbols
+    add column if not exists project_id bigint;
+
+alter table code_symbols
+    add column if not exists file_id bigint;
+
+alter table code_symbols
+    add column if not exists parent_symbol_id bigint;
+
+alter table code_symbols
+    add column if not exists type varchar(50);
+
+alter table code_symbols
+    add column if not exists name varchar(512);
+
+alter table code_symbols
+    add column if not exists signature varchar(2048);
+
+alter table code_symbols
+    add column if not exists start_line integer;
+
+alter table code_symbols
+    add column if not exists end_line integer;
+
+alter table code_symbols
+    add column if not exists created_at timestamp with time zone default now();
+
+update code_symbols set created_at = now() where created_at is null;
+
+alter table code_symbols
+    alter column project_id set not null,
+    alter column file_id set not null,
+    alter column type set not null,
+    alter column name set not null,
+    alter column created_at set not null;
+
+create index if not exists code_symbols_project_id_idx
+    on code_symbols (project_id);
+
+create index if not exists code_symbols_file_id_idx
+    on code_symbols (file_id);
+
+create index if not exists code_symbols_parent_symbol_id_idx
+    on code_symbols (parent_symbol_id);
+
+create index if not exists code_symbols_project_type_idx
+    on code_symbols (project_id, type);
+
+create table if not exists code_relationships (
+    id bigserial primary key,
+    project_id bigint not null,
+    source_symbol_id bigint not null,
+    target_symbol_id bigint not null,
+    relationship_type varchar(100) not null,
+    created_at timestamp with time zone not null default now(),
+    constraint code_relationships_project_id_fk
+        foreign key (project_id)
+        references projects (id)
+        on delete cascade,
+    constraint code_relationships_source_symbol_id_fk
+        foreign key (source_symbol_id)
+        references code_symbols (id)
+        on delete cascade,
+    constraint code_relationships_target_symbol_id_fk
+        foreign key (target_symbol_id)
+        references code_symbols (id)
+        on delete cascade
+);
+
+alter table code_relationships
+    add column if not exists project_id bigint;
+
+alter table code_relationships
+    add column if not exists source_symbol_id bigint;
+
+alter table code_relationships
+    add column if not exists target_symbol_id bigint;
+
+alter table code_relationships
+    add column if not exists relationship_type varchar(100);
+
+alter table code_relationships
+    add column if not exists created_at timestamp with time zone default now();
+
+update code_relationships set created_at = now() where created_at is null;
+
+alter table code_relationships
+    alter column project_id set not null,
+    alter column source_symbol_id set not null,
+    alter column target_symbol_id set not null,
+    alter column relationship_type set not null,
+    alter column created_at set not null;
+
+create index if not exists code_relationships_project_id_idx
+    on code_relationships (project_id);
+
+create index if not exists code_relationships_source_symbol_id_idx
+    on code_relationships (source_symbol_id);
+
+create index if not exists code_relationships_target_symbol_id_idx
+    on code_relationships (target_symbol_id);
