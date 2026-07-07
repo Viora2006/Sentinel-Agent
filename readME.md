@@ -6,6 +6,7 @@ AI Code Agent is a long-term AI infrastructure platform designed to help develop
 
 This project is **not** meant to be a simple ChatGPT wrapper. The long-term goal is to build a scalable developer platform that combines traditional backend engineering, code intelligence, repository analysis, semantic search, distributed workers, Docker-based execution, and AI planning agents.
 
+![Sentinel Project Page](screenshots/projectSentielPage.png)
 ---
 
 # Vision
