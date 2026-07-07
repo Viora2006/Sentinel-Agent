@@ -9,6 +9,8 @@ This project is **not** meant to be a simple ChatGPT wrapper. The long-term goal
 ![Sentinel Project Page](screenshots/projectSentielPage.png)
 ---
 
+
+![Sentinel Code Search](screenshots/codeSearchSentinel.png)
 # Vision
 
 Modern AI coding tools are evolving beyond autocomplete.
