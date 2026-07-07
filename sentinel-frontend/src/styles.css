@@ -123,7 +123,8 @@ label {
 }
 
 input,
-textarea {
+textarea,
+select {
   width: 100%;
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -139,10 +140,15 @@ textarea {
 }
 
 input:focus,
-textarea:focus {
+textarea:focus,
+select:focus {
   border-color: rgba(216, 180, 254, 0.75);
   box-shadow: 0 0 0 4px rgba(168, 85, 247, 0.14);
   background: rgba(10, 13, 28, 0.92);
+}
+
+select {
+  min-height: 47px;
 }
 
 .auth-actions,
@@ -1030,6 +1036,44 @@ textarea:focus {
   margin: 8px 0;
 }
 
+.code-search-panel {
+  grid-template-columns: minmax(220px, 320px) minmax(0, 1fr) auto;
+  align-items: end;
+}
+
+.link-button {
+  border: 0;
+  color: var(--cyan);
+  background: transparent;
+  padding: 0;
+  text-align: left;
+  overflow-wrap: anywhere;
+  font-weight: 800;
+}
+
+.link-button:hover {
+  color: var(--purple-light);
+}
+
+.search-result-card {
+  display: grid;
+  gap: 8px;
+}
+
+.result-card-topline {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+
+.result-card-topline > span:last-child {
+  color: var(--faint);
+  font-size: 0.82rem;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
 .settings-card strong {
   display: block;
   margin-top: 9px;
@@ -1117,7 +1161,8 @@ textarea:focus {
   .import-result,
   .import-console,
   .task-composer,
-  .search-panel {
+  .search-panel,
+  .code-search-panel {
     grid-template-columns: 1fr;
   }
 

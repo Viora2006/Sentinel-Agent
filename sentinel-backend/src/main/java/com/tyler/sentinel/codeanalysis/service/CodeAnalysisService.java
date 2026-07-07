@@ -13,7 +13,11 @@ import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.RecordDeclaration;
 import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.expr.AnnotationExpr;
+import com.github.javaparser.ast.expr.MethodCallExpr;
+import com.github.javaparser.ast.expr.ObjectCreationExpr;
 import com.github.javaparser.ast.nodeTypes.NodeWithSimpleName;
+import com.github.javaparser.ast.type.ClassOrInterfaceType;
+import com.github.javaparser.ast.type.Type;
 import com.tyler.sentinel.codeanalysis.dto.CodeParseResponse;
 import com.tyler.sentinel.codeanalysis.dto.CodeRelationshipResponse;
 import com.tyler.sentinel.codeanalysis.dto.CodeSymbolResponse;
@@ -28,10 +32,12 @@ import com.tyler.sentinel.repositoryimport.entity.ProjectFile;
 import com.tyler.sentinel.repositoryimport.repository.ProjectFileRepository;
 import com.tyler.sentinel.repositoryimport.repository.ProjectRepository;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -76,17 +82,21 @@ public class CodeAnalysisService {
         int skippedFiles = 0;
         List<CodeSymbol> symbols = new ArrayList<>();
         List<CodeRelationship> relationships = new ArrayList<>();
+        List<RelationshipCandidate> relationshipCandidates = new ArrayList<>();
 
         for (ProjectFile file : javaFiles) {
             try {
                 ParseContext context = parseJavaFile(project, file);
                 symbols.addAll(context.symbols());
                 relationships.addAll(context.relationships());
+                relationshipCandidates.addAll(context.relationshipCandidates());
                 parsedFiles++;
             } catch (RuntimeException exception) {
                 skippedFiles++;
             }
         }
+
+        relationships.addAll(resolveRelationshipCandidates(project, symbols, relationshipCandidates));
 
         return new CodeParseResponse(
                 project.getId(),
@@ -119,6 +129,7 @@ public class CodeAnalysisService {
 
         List<CodeSymbol> symbols = new ArrayList<>();
         List<CodeRelationship> relationships = new ArrayList<>();
+        List<RelationshipCandidate> relationshipCandidates = new ArrayList<>();
         Map<Node, CodeSymbol> ownerSymbols = new LinkedHashMap<>();
 
         CodeSymbol packageSymbol = compilationUnit.getPackageDeclaration()
@@ -144,6 +155,7 @@ public class CodeAnalysisService {
         for (Node node : topLevelOwners) {
             CodeSymbol typeSymbol = createTypeSymbol(project, file, packageSymbol, node, symbols, relationships);
             ownerSymbols.put(node, typeSymbol);
+            captureTypeDependencies(node, typeSymbol, relationshipCandidates);
         }
 
         compilationUnit.findAll(ImportDeclaration.class).forEach(importDeclaration -> {
@@ -160,8 +172,9 @@ public class CodeAnalysisService {
             if (owner == null) {
                 owner = createTypeSymbol(project, file, parentSymbol(type, ownerSymbols, packageSymbol), type, symbols, relationships);
                 ownerSymbols.put(type, owner);
+                captureTypeDependencies(type, owner, relationshipCandidates);
             }
-            captureMembers(project, file, type, owner, symbols, relationships);
+            captureMembers(project, file, type, owner, symbols, relationships, relationshipCandidates);
         }
 
         for (EnumDeclaration type : compilationUnit.findAll(EnumDeclaration.class)) {
@@ -169,8 +182,9 @@ public class CodeAnalysisService {
             if (owner == null) {
                 owner = createTypeSymbol(project, file, parentSymbol(type, ownerSymbols, packageSymbol), type, symbols, relationships);
                 ownerSymbols.put(type, owner);
+                captureTypeDependencies(type, owner, relationshipCandidates);
             }
-            captureMembers(project, file, type, owner, symbols, relationships);
+            captureMembers(project, file, type, owner, symbols, relationships, relationshipCandidates);
         }
 
         for (RecordDeclaration type : compilationUnit.findAll(RecordDeclaration.class)) {
@@ -178,11 +192,12 @@ public class CodeAnalysisService {
             if (owner == null) {
                 owner = createTypeSymbol(project, file, parentSymbol(type, ownerSymbols, packageSymbol), type, symbols, relationships);
                 ownerSymbols.put(type, owner);
+                captureTypeDependencies(type, owner, relationshipCandidates);
             }
-            captureMembers(project, file, type, owner, symbols, relationships);
+            captureMembers(project, file, type, owner, symbols, relationships, relationshipCandidates);
         }
 
-        return new ParseContext(symbols, relationships);
+        return new ParseContext(symbols, relationships, relationshipCandidates);
     }
 
     private void captureMembers(
@@ -191,7 +206,8 @@ public class CodeAnalysisService {
             Node type,
             CodeSymbol owner,
             List<CodeSymbol> symbols,
-            List<CodeRelationship> relationships
+            List<CodeRelationship> relationships,
+            List<RelationshipCandidate> relationshipCandidates
     ) {
         type.findAll(FieldDeclaration.class).stream()
                 .filter(field -> belongsDirectlyTo(field, type))
@@ -200,6 +216,7 @@ public class CodeAnalysisService {
                         CodeSymbol symbol = saveSymbol(project, file, owner, "FIELD", variable.getNameAsString(),
                                 field.getElementType().asString() + " " + variable.getNameAsString(), variable, symbols);
                         relationships.add(saveRelationship(project, owner, symbol, "CONTAINS"));
+                        addTypeCandidate(symbol, "USES_FIELD_TYPE", field.getElementType(), relationshipCandidates);
                     }
                 });
 
@@ -209,6 +226,9 @@ public class CodeAnalysisService {
                     CodeSymbol symbol = saveSymbol(project, file, owner, "CONSTRUCTOR", constructor.getNameAsString(),
                             constructor.getDeclarationAsString(false, false, false), constructor, symbols);
                     relationships.add(saveRelationship(project, owner, symbol, "CONTAINS"));
+                    constructor.getParameters().forEach(parameter ->
+                            addTypeCandidate(symbol, "USES_PARAMETER", parameter.getType(), relationshipCandidates));
+                    captureExecutableDependencies(constructor, symbol, relationshipCandidates);
                 });
 
         type.findAll(MethodDeclaration.class).stream()
@@ -217,6 +237,10 @@ public class CodeAnalysisService {
                     CodeSymbol symbol = saveSymbol(project, file, owner, "METHOD", method.getNameAsString(),
                             method.getDeclarationAsString(false, false, false), method, symbols);
                     relationships.add(saveRelationship(project, owner, symbol, "CONTAINS"));
+                    addTypeCandidate(symbol, "RETURNS", method.getType(), relationshipCandidates);
+                    method.getParameters().forEach(parameter ->
+                            addTypeCandidate(symbol, "USES_PARAMETER", parameter.getType(), relationshipCandidates));
+                    captureExecutableDependencies(method, symbol, relationshipCandidates);
                 });
 
         type.findAll(AnnotationExpr.class).stream()
@@ -226,6 +250,119 @@ public class CodeAnalysisService {
                             annotation.toString(), annotation, symbols);
                     relationships.add(saveRelationship(project, owner, symbol, "ANNOTATED_BY"));
                 });
+    }
+
+    private void captureTypeDependencies(
+            Node type,
+            CodeSymbol symbol,
+            List<RelationshipCandidate> relationshipCandidates
+    ) {
+        if (type instanceof ClassOrInterfaceDeclaration declaration) {
+            declaration.getExtendedTypes().forEach(extendedType ->
+                    relationshipCandidates.add(new RelationshipCandidate(
+                            symbol,
+                            "EXTENDS",
+                            extendedType.getNameAsString(),
+                            Set.of("CLASS", "INTERFACE")
+                    )));
+            declaration.getImplementedTypes().forEach(implementedType ->
+                    relationshipCandidates.add(new RelationshipCandidate(
+                            symbol,
+                            "IMPLEMENTS",
+                            implementedType.getNameAsString(),
+                            Set.of("INTERFACE", "CLASS")
+                    )));
+        }
+
+        if (type instanceof EnumDeclaration declaration) {
+            declaration.getImplementedTypes().forEach(implementedType ->
+                    relationshipCandidates.add(new RelationshipCandidate(
+                            symbol,
+                            "IMPLEMENTS",
+                            implementedType.getNameAsString(),
+                            Set.of("INTERFACE", "CLASS")
+                    )));
+        }
+
+        if (type instanceof RecordDeclaration declaration) {
+            declaration.getImplementedTypes().forEach(implementedType ->
+                    relationshipCandidates.add(new RelationshipCandidate(
+                            symbol,
+                            "IMPLEMENTS",
+                            implementedType.getNameAsString(),
+                            Set.of("INTERFACE", "CLASS")
+                    )));
+        }
+    }
+
+    private void captureExecutableDependencies(
+            Node executable,
+            CodeSymbol source,
+            List<RelationshipCandidate> relationshipCandidates
+    ) {
+        executable.findAll(MethodCallExpr.class).forEach(methodCall ->
+                relationshipCandidates.add(new RelationshipCandidate(
+                        source,
+                        "CALLS",
+                        methodCall.getNameAsString(),
+                        Set.of("METHOD")
+                )));
+
+        executable.findAll(ObjectCreationExpr.class).forEach(objectCreation ->
+                relationshipCandidates.add(new RelationshipCandidate(
+                        source,
+                        "INSTANTIATES",
+                        objectCreation.getType().getNameAsString(),
+                        Set.of("CLASS", "RECORD", "ENUM")
+                )));
+    }
+
+    private void addTypeCandidate(
+            CodeSymbol source,
+            String relationshipType,
+            Type type,
+            List<RelationshipCandidate> relationshipCandidates
+    ) {
+        type.findAll(ClassOrInterfaceType.class).forEach(classType ->
+                relationshipCandidates.add(new RelationshipCandidate(
+                        source,
+                        relationshipType,
+                        classType.getNameAsString(),
+                        Set.of("CLASS", "INTERFACE", "RECORD", "ENUM")
+                )));
+    }
+
+    private List<CodeRelationship> resolveRelationshipCandidates(
+            Project project,
+            List<CodeSymbol> symbols,
+            List<RelationshipCandidate> candidates
+    ) {
+        Map<String, List<CodeSymbol>> symbolsByName = new LinkedHashMap<>();
+        for (CodeSymbol symbol : symbols) {
+            symbolsByName.computeIfAbsent(symbol.getName(), key -> new ArrayList<>()).add(symbol);
+        }
+
+        Set<RelationshipKey> savedRelationships = new HashSet<>();
+        List<CodeRelationship> relationships = new ArrayList<>();
+
+        for (RelationshipCandidate candidate : candidates) {
+            List<CodeSymbol> targets = symbolsByName.getOrDefault(candidate.targetName(), List.of()).stream()
+                    .filter(symbol -> candidate.targetTypes().contains(symbol.getType()))
+                    .toList();
+
+            for (CodeSymbol target : targets) {
+                RelationshipKey key = new RelationshipKey(
+                        candidate.source().getId(),
+                        target.getId(),
+                        candidate.relationshipType()
+                );
+                if (savedRelationships.add(key)) {
+                    relationships.add(saveRelationship(project, candidate.source(), target, candidate.relationshipType()));
+                }
+            }
+        }
+
+        return relationships;
     }
 
     private CodeSymbol createTypeSymbol(
@@ -378,6 +515,21 @@ public class CodeAnalysisService {
                 .orElseThrow(() -> new CodeAnalysisException("Signed-in user could not be found."));
     }
 
-    private record ParseContext(List<CodeSymbol> symbols, List<CodeRelationship> relationships) {
+    private record ParseContext(
+            List<CodeSymbol> symbols,
+            List<CodeRelationship> relationships,
+            List<RelationshipCandidate> relationshipCandidates
+    ) {
+    }
+
+    private record RelationshipCandidate(
+            CodeSymbol source,
+            String relationshipType,
+            String targetName,
+            Set<String> targetTypes
+    ) {
+    }
+
+    private record RelationshipKey(Long sourceSymbolId, Long targetSymbolId, String relationshipType) {
     }
 }

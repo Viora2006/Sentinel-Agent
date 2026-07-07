@@ -241,7 +241,13 @@ function App() {
       case 'agentTasks':
         return <AgentTasksPanel />
       case 'codeSearch':
-        return <CodeSearchPanel />
+        return (
+          <CodeSearchPanel
+            onOpenProject={handleOpenProject}
+            onSessionExpired={clearAuthenticatedSession}
+            projects={projects}
+          />
+        )
       case 'workers':
         return <WorkersPanel />
       case 'settings':
